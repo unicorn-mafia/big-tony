@@ -1,0 +1,73 @@
+{
+    "url": "https://6e03055d1d8e.ngrok-free.app/api/submitMember",
+    "method": "POST",
+    "path_params": {},
+    "query_params": {
+      "required": [],
+      "properties": {}
+    },
+    "request_body": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "name": {
+          "type": "string",
+          "input": {
+            "type": "description",
+            "description": "Full name of the community member (first and last name)"
+          }
+        },
+        "role": {
+          "type": "string",
+          "input": {
+            "type": "description",
+            "description": "Member’s current job title or role (e.g. Software Engineer, Product Manager)"
+          }
+        },
+        "github": {
+          "type": "string",
+          "input": {
+            "type": "description",
+            "description": "GitHub username of the member"
+          }
+        },
+        "company": {
+          "type": "string",
+          "input": {
+            "type": "description",
+            "description": "Name of the company or organisation the member currently works at"
+          }
+        },
+        "linkedin": {
+          "type": "string",
+          "input": {
+            "type": "description",
+            "description": "LinkedIn profile URL for the member"
+          }
+        },
+        "phone_e164": {
+          "type": "string",
+          "input": {
+            "type": "value",
+            "value": "%PHONE_NUMBER%"
+          }
+        },
+        "referer_name": {
+          "type": "string",
+          "input": {
+            "type": "description",
+            "description": "Name of the person who referred the member to the community"
+          }
+        }
+      },
+      "description": "full-member-content"
+    },
+    "request_headers": {
+      "authorization": {
+        "input": {
+          "type": "value",
+          "value": "Bearer big-tony-api-key"
+        }
+      }
+    }
+  }

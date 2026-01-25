@@ -1,36 +1,124 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Big Tony
 
-## Getting Started
+Big Tony is a WhatsApp Agent powered by [Wassist](https://wassist.app). It handles community member management, membership verification, and demo submissions.
 
-First, run the development server:
+## Production
+
+The production Big Tony agent is available on WhatsApp at: **+44 7488 895960**
+
+## Local Development Setup
+
+### Prerequisites
+
+- Node.js (v18+)
+- npm
+- [ngrok](https://ngrok.com/) account and CLI installed
+- [Wassist](https://wassist.app) account
+
+### 1. Clone and Install
+
+```bash
+git clone <repo-url>
+cd big-tony
+npm install
+```
+
+### 2. Environment Variables
+
+Copy the environment template and configure your variables:
+
+```bash
+cp .env.template .env
+```
+
+Required environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `API_KEY` | API key for authenticating requests from Wassist |
+| `RESEND_API_KEY` | API key from [Resend](https://resend.com) for sending emails |
+| `GITHUB_TOKEN` | GitHub Personal Access Token (see [GitHub Access](#github-access)) |
+
+### 3. Start the Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The server runs on `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 4. Expose with ngrok
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Start ngrok to get a public URL for your local server:
 
-## Learn More
+```bash
+ngrok http 3000
+```
 
-To learn more about Next.js, take a look at the following resources:
+Copy the generated `https://*.ngrok.io` URL - you'll need this for Wassist.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 5. Configure Wassist
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Create an account at [wassist.app](https://wassist.app)
+2. Create a new agent
+3. For each tool in the `wassist/tools/` directory:
+   - Open the JSON file (`checkMember.json`, `submitDemo.json`, `submitMember.json`)
+   - In Wassist, upload/create an API tool using the JSON configuration
+   - Replace `<url>` in the tool config with your ngrok URL
+4. Click **Start Testing** to connect your WhatsApp for testing
 
-## Deploy on Vercel
+## External Service Configuration
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Email Sending (Resend)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+To test email functionality:
+
+1. Create an account at [resend.com](https://resend.com)
+2. Generate an API key
+3. Add the key to your `.env` file as `RESEND_API_KEY`
+
+### GitHub Access
+
+The bot requires GitHub access to manage the members database in the `members0db` repository.
+
+1. Go to GitHub → Settings → Developer settings → Personal access tokens
+2. Generate a new token (classic) with the `repo` scope
+3. Ensure your account has access to the `members0db` repository
+4. Add the token to your `.env` file as `GITHUB_TOKEN`
+
+## API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/checkMember` | Verify if a phone number belongs to a registered member |
+| `POST /api/submitMember` | Register a new community member |
+| `POST /api/submitDemo` | Submit a demo for review |
+
+## Project Structure
+
+```
+big-tony/
+├── app/
+│   ├── api/
+│   │   ├── checkMember/    # Member verification endpoint
+│   │   ├── submitDemo/     # Demo submission endpoint
+│   │   └── submitMember/   # Member registration endpoint
+│   └── ...
+├── lib/
+│   ├── authorization.ts    # Request authorization helpers
+│   ├── github.ts           # GitHub API integration
+│   └── validation.ts       # Input validation
+├── types/
+│   └── membersdb.ts        # TypeScript types for member data
+└── wassist/
+    └── tools/              # Wassist tool configurations (JSON)
+```
+
+## Scripts
+
+```bash
+npm run dev     # Start development server
+npm run build   # Build for production
+npm run start   # Start production server
+npm run lint    # Run ESLint
+```
