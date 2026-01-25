@@ -9,8 +9,8 @@
   --um-purple: #B307EB;
   --um-blue: #3198F1;
   
-  --background: var(--um-black);
-  --foreground: var(--um-white);
+  --background: var(--um-white);
+  --foreground: var(--um-black);
 }
 
 @theme inline {
