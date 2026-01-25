@@ -18,7 +18,7 @@ The production Big Tony agent is available on WhatsApp at: **+44 7488 895960**
 ### 1. Clone and Install
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/unicorn-mafia/big-tony.git
 cd big-tony
 npm install
 ```
@@ -61,11 +61,12 @@ Copy the generated `https://*.ngrok.io` URL - you'll need this for Wassist.
 
 1. Create an account at [wassist.app](https://wassist.app)
 2. Create a new agent
-3. For each tool in the `wassist/tools/` directory:
+3. Copy the contents of `wassist/system_prompt.txt` and paste it into the agent's system prompt field
+4. For each tool in the `wassist/tools/` directory:
    - Open the JSON file (`checkMember.json`, `submitDemo.json`, `submitMember.json`)
    - In Wassist, upload/create an API tool using the JSON configuration
    - Replace `<url>` in the tool config with your ngrok URL
-4. Click **Start Testing** to connect your WhatsApp for testing
+5. Click **Start Testing** to connect your WhatsApp for testing
 
 ## External Service Configuration
 
@@ -111,6 +112,7 @@ big-tony/
 ├── types/
 │   └── membersdb.ts        # TypeScript types for member data
 └── wassist/
+    ├── system_prompt.txt   # Agent system prompt for Wassist
     └── tools/              # Wassist tool configurations (JSON)
 ```
 
