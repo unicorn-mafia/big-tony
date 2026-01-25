@@ -1,0 +1,31 @@
+{
+    "url": "<url>/api/checkMember",
+    "method": "POST",
+    "path_params": {},
+    "query_params": {
+      "required": [],
+      "properties": {}
+    },
+    "request_body": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "phoneNumber": {
+          "type": "string",
+          "input": {
+            "type": "value",
+            "value": "%PHONE_NUMBER%"
+          }
+        }
+      },
+      "description": ""
+    },
+    "request_headers": {
+      "authorization": {
+        "input": {
+          "type": "value",
+          "value": "Bearer big-tony-api-key"
+        }
+      }
+    }
+  }

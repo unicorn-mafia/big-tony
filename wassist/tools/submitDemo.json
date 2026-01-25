@@ -1,0 +1,54 @@
+{
+  "url": "<url>/api/submitDemo",
+  "method": "POST",
+  "path_params": {},
+  "query_params": {
+    "properties": {},
+    "required": []
+  },
+  "request_body": {
+    "type": "object",
+    "description": "The demo details the CUSTOMER is submitting",
+    "properties": {
+      "videoUrl": {
+        "type": "string",
+        "input": {
+          "type": "description",
+          "description": "Video URL of the demo the CUSTOMER is submitting - this is optional"
+        }
+      },
+      "demoPitch": {
+        "type": "string",
+        "input": {
+          "type": "description",
+          "description": "Pitch of the demo the CUSTOMER is submitting, help them to sell their demo to you"
+        }
+      },
+      "phoneNumber": {
+        "type": "string",
+        "input": {
+          "type": "value",
+          "value": "%PHONE_NUMBER%"
+        }
+      },
+      "title": {
+        "type": "string",
+        "input": {
+          "type": "description",
+          "description": "The title of the demo"
+        }
+      }
+    },
+    "required": []
+  },
+  "request_headers": {
+    "authorization": {
+      "id": "54ff2847-cdc0-4aa7-ba2a-5c2bfc6d3400",
+      "name": "authorization",
+      "input": {
+        "type": "value",
+        "value": "Bearer big-tony-api-key"
+      }
+    }
+  }
+}
