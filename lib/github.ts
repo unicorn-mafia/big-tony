@@ -215,9 +215,9 @@ export class GitHubService {
 
 - Name: ${memberData.name}
 - GitHub: ${github}
-- LinkedIn: ${memberData.linkedin}
-- Role: ${memberData.role}
-- Company: ${memberData.company}
+- LinkedIn: ${memberData.social.linkedin}
+- Role: ${memberData.current_job.role}
+- Company: ${memberData.current_job.company}
 - Referer: ${memberData.referer_name}
 - Source: whatsapp
 
