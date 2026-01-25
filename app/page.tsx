@@ -24,7 +24,14 @@ export default function Home() {
               <span className="w-2 h-2 rounded-full bg-um-purple animate-pulse"></span>
               Production
             </h2>
-            <p className="font-mono text-2xl text-um-white">+44 7488 895960</p>
+            <a 
+              href="https://wa.me/447488895960"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-2xl text-um-white hover:text-um-purple transition-colors block w-fit"
+            >
+              +44 7488 895960
+            </a>
             <p className="text-sm text-gray-500 mt-2">Available on WhatsApp</p>
           </div>
 
