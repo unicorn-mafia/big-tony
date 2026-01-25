@@ -35,7 +35,7 @@ Required environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `API_KEY` | API key for authenticating requests from Wassist |
+| `API_KEY` | API key to access the big tony - used to authenticate requests from Wassist |
 | `RESEND_API_KEY` | API key from [Resend](https://resend.com) for sending emails |
 | `GITHUB_TOKEN` | GitHub Personal Access Token (see [GitHub Access](#github-access)) |
 
@@ -66,6 +66,7 @@ Copy the generated `https://*.ngrok.io` URL - you'll need this for Wassist.
    - Open the JSON file (`checkMember.json`, `submitDemo.json`, `submitMember.json`)
    - In Wassist, upload/create an API tool using the JSON configuration
    - Replace `<url>` in the tool config with your ngrok URL
+   - Replace `Bearer big-tony-api-key` in the tool config with the API key from your `.env` file - generate this
 5. Click **Start Testing** to connect your WhatsApp for testing
 
 ## External Service Configuration
