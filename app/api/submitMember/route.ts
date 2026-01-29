@@ -6,13 +6,13 @@ import { GitHubService } from "../../../lib/github";
 import { Member } from "@/types/membersdb";
 
 export const submitMemberSchema = z.object({
-  name: z.string(),
-  role: z.string(),
-  github: z.string(),
-  company: z.string(),
-  linkedin: z.string(),
-  phone_e164: z.string(),
-  referer_name: z.string(),
+  name: z.string().nonempty(),
+  role: z.string().nonempty(),
+  github: z.string().nonempty(),
+  company: z.string().nonempty(),
+  linkedin: z.string().nonempty(),
+  phone_e164: z.string().nonempty(),
+  referer_name: z.string().nonempty(),
 });
 
 export const POST = async (request: Request) => {
