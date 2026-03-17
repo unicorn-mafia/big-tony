@@ -2,12 +2,14 @@ import { Octokit } from "@octokit/rest";
 import yaml from "js-yaml";
 
 import type { Member, MembersYaml } from "../types/membersdb";
+import { GoogleContactsService, type GoogleContactSyncResult } from "./googleContacts";
 
 export interface SubmitResult {
   status: "pr_open" | "pr_exists" | "error";
   pr_url?: string;
   branch?: string;
   message: string;
+  google_contacts?: GoogleContactSyncResult;
 }
 
 export class GitHubService {
@@ -115,10 +117,13 @@ export class GitHubService {
     // Check if PR already exists
     const { exists: prExists, url: prUrl } = await this.checkPRExists(githubUsername);
     if (prExists) {
+      const googleContacts = new GoogleContactsService();
+      const syncResult = await googleContacts.syncMemberContact(memberData, prUrl);
       return {
         status: "pr_exists",
         pr_url: prUrl,
-        message: "PR already exists",
+        message: this.withGoogleContactNotification("PR already exists.", syncResult),
+        google_contacts: syncResult,
       };
     }
 
@@ -234,11 +239,22 @@ Reviewer checklist:
       base: this.defaultBranch,
     });
 
+    const googleContacts = new GoogleContactsService();
+    const syncResult = await googleContacts.syncMemberContact(newMember, pr.html_url);
+
     return {
       status: "pr_open",
       pr_url: pr.html_url,
       branch: branchName,
-      message: "PR created successfully",
+      message: this.withGoogleContactNotification("PR created successfully.", syncResult),
+      google_contacts: syncResult,
     };
+  }
+
+  private withGoogleContactNotification(
+    baseMessage: string,
+    syncResult: GoogleContactSyncResult
+  ): string {
+    return `${baseMessage} ${syncResult.message}`;
   }
 }
