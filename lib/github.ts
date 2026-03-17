@@ -110,6 +110,13 @@ export class GitHubService {
   async createMemberPR(memberData: Member): Promise<SubmitResult> {
     const github = this.normalizeGitHubUrl(memberData.social.github);
     const githubUsername = this.normalizeGitHubUsername(memberData.social.github);
+    const memberForContacts = {
+      ...memberData,
+      social: {
+        ...memberData.social,
+        github,
+      },
+    };
     const slug = githubUsername.toLowerCase();
     const today = new Date().toISOString().split("T")[0];
     const branchName = `join/${slug}-${today.replace(/-/g, "")}-${Math.random().toString(36).substring(2, 6)}`;
@@ -118,7 +125,7 @@ export class GitHubService {
     const { exists: prExists, url: prUrl } = await this.checkPRExists(githubUsername);
     if (prExists) {
       const googleContacts = new GoogleContactsService();
-      const syncResult = await googleContacts.syncMemberContact(memberData, prUrl);
+      const syncResult = await googleContacts.syncMemberContact(memberForContacts, prUrl);
       return {
         status: "pr_exists",
         pr_url: prUrl,
@@ -240,7 +247,7 @@ Reviewer checklist:
     });
 
     const googleContacts = new GoogleContactsService();
-    const syncResult = await googleContacts.syncMemberContact(newMember, pr.html_url);
+    const syncResult = await googleContacts.syncMemberContact(memberForContacts, pr.html_url);
 
     return {
       status: "pr_open",
