@@ -16,8 +16,11 @@ interface ExistingContact {
 export class GoogleContactsService {
   private peopleService?: people_v1.People;
   private enabled: boolean;
+  private requestTimeoutMs: number;
 
   constructor() {
+    this.requestTimeoutMs = this.resolveTimeoutMs(process.env.GOOGLE_CONTACTS_TIMEOUT_MS);
+
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
@@ -46,15 +49,18 @@ export class GoogleContactsService {
     try {
       const existingContact = await this.findContactByPhone(member.phone);
       if (existingContact) {
-        const response = await this.peopleService.people.updateContact({
-          resourceName: existingContact.resourceName,
-          updatePersonFields: "names,phoneNumbers,organizations,urls,biographies",
-          personFields: "names,phoneNumbers,organizations,urls,biographies",
-          requestBody: {
-            ...contactPayload,
-            etag: existingContact.etag,
-          },
-        });
+        const response = await this.withTimeout(
+          this.peopleService.people.updateContact({
+            resourceName: existingContact.resourceName,
+            updatePersonFields: "names,phoneNumbers,organizations,urls,biographies",
+            personFields: "names,phoneNumbers,organizations,urls,biographies",
+            requestBody: {
+              ...contactPayload,
+              etag: existingContact.etag,
+            },
+          }),
+          "updateContact"
+        );
 
         return {
           status: "updated",
@@ -63,9 +69,12 @@ export class GoogleContactsService {
         };
       }
 
-      const response = await this.peopleService.people.createContact({
-        requestBody: contactPayload,
-      });
+      const response = await this.withTimeout(
+        this.peopleService.people.createContact({
+          requestBody: contactPayload,
+        }),
+        "createContact"
+      );
 
       return {
         status: "created",
@@ -90,11 +99,14 @@ export class GoogleContactsService {
       return null;
     }
 
-    const response = await this.peopleService.people.searchContacts({
-      query: sanitizedPhone,
-      readMask: "names,phoneNumbers,etag",
-      pageSize: 10,
-    });
+    const response = await this.withTimeout(
+      this.peopleService.people.searchContacts({
+        query: sanitizedPhone,
+        readMask: "names,phoneNumbers,etag",
+        pageSize: 10,
+      }),
+      "searchContacts"
+    );
 
     const results = response.data.results ?? [];
     for (const result of results) {
@@ -179,5 +191,35 @@ export class GoogleContactsService {
     }
 
     return trimmed.replace(/\D/g, "");
+  }
+
+  private resolveTimeoutMs(rawValue: string | undefined): number {
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 5000;
+    }
+
+    return parsed;
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, operationName: string): Promise<T> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(
+          new Error(
+            `Google Contacts ${operationName} timed out after ${this.requestTimeoutMs}ms`
+          )
+        );
+      }, this.requestTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
   }
 }

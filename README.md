@@ -99,7 +99,7 @@ To automatically add onboarding contacts when a member PR is submitted:
 2. Generate a refresh token with `https://www.googleapis.com/auth/contacts` scope.
 3. Add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN` to your `.env`.
 
-When configured, `POST /api/submitMember` now returns a message confirming whether the contact was added or updated in Google Contacts.
+`POST /api/submitMember` returns a message with the Google Contacts sync outcome (added, updated, skipped, or failed).
 
 ## API Endpoints
 

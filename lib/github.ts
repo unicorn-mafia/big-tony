@@ -124,8 +124,7 @@ export class GitHubService {
     // Check if PR already exists
     const { exists: prExists, url: prUrl } = await this.checkPRExists(githubUsername);
     if (prExists) {
-      const googleContacts = new GoogleContactsService();
-      const syncResult = await googleContacts.syncMemberContact(memberForContacts, prUrl);
+      const syncResult = await this.syncGoogleContact(memberForContacts, prUrl);
       return {
         status: "pr_exists",
         pr_url: prUrl,
@@ -246,8 +245,7 @@ Reviewer checklist:
       base: this.defaultBranch,
     });
 
-    const googleContacts = new GoogleContactsService();
-    const syncResult = await googleContacts.syncMemberContact(memberForContacts, pr.html_url);
+    const syncResult = await this.syncGoogleContact(memberForContacts, pr.html_url);
 
     return {
       status: "pr_open",
@@ -263,5 +261,13 @@ Reviewer checklist:
     syncResult: GoogleContactSyncResult
   ): string {
     return `${baseMessage} ${syncResult.message}`;
+  }
+
+  private async syncGoogleContact(
+    member: Member,
+    prUrl?: string
+  ): Promise<GoogleContactSyncResult> {
+    const googleContacts = new GoogleContactsService();
+    return googleContacts.syncMemberContact(member, prUrl);
   }
 }
