@@ -38,6 +38,9 @@ Required environment variables:
 | `API_KEY` | API key to access the big tony - used to authenticate requests from Wassist |
 | `RESEND_API_KEY` | API key from [Resend](https://resend.com) for sending emails |
 | `GITHUB_TOKEN` | GitHub Personal Access Token (see [GitHub Access](#github-access)) |
+| `GOOGLE_CLIENT_ID` | OAuth client ID for Google Contacts sync |
+| `GOOGLE_CLIENT_SECRET` | OAuth client secret for Google Contacts sync |
+| `GOOGLE_REFRESH_TOKEN` | OAuth refresh token with Google People API scope |
 
 ### 3. Start the Development Server
 
@@ -87,6 +90,16 @@ The bot requires GitHub access to manage the members database in the `members0db
 2. Generate a new token (classic) with the `repo` scope
 3. Ensure your account has access to the `members0db` repository
 4. Add the token to your `.env` file as `GITHUB_TOKEN`
+
+### Google Contacts Access
+
+To automatically add onboarding contacts when a member PR is submitted:
+
+1. Create OAuth credentials in Google Cloud for the Google People API.
+2. Generate a refresh token with `https://www.googleapis.com/auth/contacts` scope.
+3. Add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN` to your `.env`.
+
+`POST /api/submitMember` returns a message with the Google Contacts sync outcome (added, updated, skipped, or failed).
 
 ## API Endpoints
 

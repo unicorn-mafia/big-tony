@@ -2,12 +2,14 @@ import { Octokit } from "@octokit/rest";
 import yaml from "js-yaml";
 
 import type { Member, MembersYaml } from "../types/membersdb";
+import { GoogleContactsService, type GoogleContactSyncResult } from "./googleContacts";
 
 export interface SubmitResult {
   status: "pr_open" | "pr_exists" | "error";
   pr_url?: string;
   branch?: string;
   message: string;
+  google_contacts?: GoogleContactSyncResult;
 }
 
 export class GitHubService {
@@ -108,6 +110,13 @@ export class GitHubService {
   async createMemberPR(memberData: Member): Promise<SubmitResult> {
     const github = this.normalizeGitHubUrl(memberData.social.github);
     const githubUsername = this.normalizeGitHubUsername(memberData.social.github);
+    const memberForContacts = {
+      ...memberData,
+      social: {
+        ...memberData.social,
+        github,
+      },
+    };
     const slug = githubUsername.toLowerCase();
     const today = new Date().toISOString().split("T")[0];
     const branchName = `join/${slug}-${today.replace(/-/g, "")}-${Math.random().toString(36).substring(2, 6)}`;
@@ -115,10 +124,12 @@ export class GitHubService {
     // Check if PR already exists
     const { exists: prExists, url: prUrl } = await this.checkPRExists(githubUsername);
     if (prExists) {
+      const syncResult = await this.syncGoogleContact(memberForContacts, prUrl);
       return {
         status: "pr_exists",
         pr_url: prUrl,
-        message: "PR already exists",
+        message: this.withGoogleContactNotification("PR already exists.", syncResult),
+        google_contacts: syncResult,
       };
     }
 
@@ -234,11 +245,29 @@ Reviewer checklist:
       base: this.defaultBranch,
     });
 
+    const syncResult = await this.syncGoogleContact(memberForContacts, pr.html_url);
+
     return {
       status: "pr_open",
       pr_url: pr.html_url,
       branch: branchName,
-      message: "PR created successfully",
+      message: this.withGoogleContactNotification("PR created successfully.", syncResult),
+      google_contacts: syncResult,
     };
+  }
+
+  private withGoogleContactNotification(
+    baseMessage: string,
+    syncResult: GoogleContactSyncResult
+  ): string {
+    return `${baseMessage} ${syncResult.message}`;
+  }
+
+  private async syncGoogleContact(
+    member: Member,
+    prUrl?: string
+  ): Promise<GoogleContactSyncResult> {
+    const googleContacts = new GoogleContactsService();
+    return googleContacts.syncMemberContact(member, prUrl);
   }
 }
