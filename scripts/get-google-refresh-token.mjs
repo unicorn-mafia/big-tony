@@ -1,7 +1,9 @@
 /**
  * One-off helper to mint a GOOGLE_REFRESH_TOKEN for Google Contacts sync.
  *
- *   GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... node scripts/get-google-refresh-token.mjs
+ * Reads GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET from .env:
+ *
+ *   npm run google:auth
  *
  * Opens the Google consent screen, catches the redirect on localhost, and
  * prints the refresh token to paste into .env. Add

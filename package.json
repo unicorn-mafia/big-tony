@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:contacts": "node --import tsx --test scripts/test-google-contacts.mts",
-    "google:auth": "node scripts/get-google-refresh-token.mjs"
+    "google:auth": "node --env-file-if-exists=.env scripts/get-google-refresh-token.mjs"
   },
   "dependencies": {
     "@googleapis/people": "^8.0.0",
