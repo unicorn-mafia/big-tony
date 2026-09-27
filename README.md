@@ -153,8 +153,15 @@ everything else works as normal.
   phone number is not added at all, since the phone number is the deduplication
   key. A malformed LinkedIn or GitHub link is simply left off the contact rather
   than blocking the join.
+- Every synced contact is added to a **"Unicorn Mafia" label** in Google
+  Contacts (configurable with `GOOGLE_CONTACTS_LABEL`). The label is created on
+  first use and reused after that. This keeps community members identifiable as
+  a group — filterable under Groups in the iPhone Contacts app, and removable in
+  one action if the sync is ever wound down. A contact that already carries the
+  label is left completely untouched, so that stays a zero-write path.
 - Failures never break the join flow - `POST /api/submitMember` still returns
-  the PR result, with the sync outcome under `google_contacts`.
+  the PR result, with the sync outcome under `google_contacts`. A label that
+  cannot be applied is logged but never fails the contact write.
 
 Run the sync's test suite (fully offline, against a fake People API):
 

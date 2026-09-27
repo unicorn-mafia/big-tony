@@ -48,10 +48,36 @@ type ContactsClient = {
   people: Pick<people_v1.Resource$People, "createContact" | "updateContact"> & {
     connections: Pick<people_v1.Resource$People$Connections, "list">;
   };
+  // `contactGroups.delete` takes a `deleteContacts` flag that removes every
+  // contact in the group, so it is deliberately left out of this type too.
+  contactGroups: Pick<people_v1.Resource$Contactgroups, "list" | "create"> & {
+    members: Pick<people_v1.Resource$Contactgroups$Members, "modify">;
+  };
 };
 
 /** Fields we read when scanning for an existing contact and when merging. */
-const PERSON_FIELDS = "names,phoneNumbers,organizations,urls,biographies,metadata";
+const PERSON_FIELDS =
+  "names,phoneNumbers,organizations,urls,biographies,metadata,memberships";
+
+/**
+ * Google Contacts label applied to everyone this service touches, so community
+ * members stay identifiable as a group - filterable on a phone, and removable
+ * in one action if the sync is ever wound down.
+ *
+ * Read lazily rather than at module load so tests and deployments can override
+ * it without import-order surprises.
+ */
+function contactLabel(): string {
+  return process.env.GOOGLE_CONTACTS_LABEL?.trim() || "Unicorn Mafia";
+}
+
+/** Resolved label resourceName, cached per process. Label name -> resourceName. */
+const groupCache = new Map<string, string>();
+
+/** Test seam - lets a suite start from a known state. */
+export function resetGroupCache(): void {
+  groupCache.clear();
+}
 
 /**
  * Stamped into the notes of every contact this service creates. It is what
@@ -236,10 +262,18 @@ export class GoogleContactsService {
 
       rememberCreate(data.phoneE164);
 
+      const resourceName = response.data.resourceName ?? undefined;
+      if (resourceName) {
+        const group = await this.resolveGroup();
+        if (group) {
+          await this.addToGroup(group, resourceName);
+        }
+      }
+
       return {
         status: "created",
         message: `Added ${data.displayName} to Google Contacts.`,
-        resourceName: response.data.resourceName ?? undefined,
+        resourceName,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -399,32 +433,132 @@ export class GoogleContactsService {
       filled.push("notes");
     }
 
-    if (updateFields.length === 0) {
+    // The label is a membership, not a field, so it is applied separately and
+    // an existing contact that predates the label still gets one.
+    const group = await this.resolveGroup();
+    const alreadyLabelled =
+      !group ||
+      (existing.memberships ?? []).some(
+        (membership) =>
+          membership.contactGroupMembership?.contactGroupResourceName === group
+      );
+
+    if (updateFields.length === 0 && alreadyLabelled) {
       return {
         status: "already_exists",
         message: `${data.displayName} is already in Google Contacts - nothing to add.`,
-        resourceName: existing.resourceName ?? undefined,
+        resourceName: existing.resourceName,
       };
     }
 
-    const response = await this.withTimeout(
-      this.peopleService!.people.updateContact({
-        resourceName: existing.resourceName,
-        updatePersonFields: updateFields.join(","),
-        personFields: PERSON_FIELDS,
-        requestBody,
-      }),
-      "updateContact"
-    );
+    let resourceName = existing.resourceName;
+
+    if (updateFields.length > 0) {
+      const response = await this.withTimeout(
+        this.peopleService!.people.updateContact({
+          resourceName: existing.resourceName,
+          updatePersonFields: updateFields.join(","),
+          personFields: PERSON_FIELDS,
+          requestBody,
+        }),
+        "updateContact"
+      );
+      resourceName = response.data.resourceName ?? existing.resourceName;
+    }
+
+    if (!alreadyLabelled && group) {
+      if (await this.addToGroup(group, existing.resourceName)) {
+        filled.push(`"${contactLabel()}" label`);
+      }
+    }
+
+    // Labelling can fail without failing the sync, so there may be nothing left
+    // to report.
+    if (filled.length === 0) {
+      return {
+        status: "already_exists",
+        message: `${data.displayName} is already in Google Contacts - nothing to add.`,
+        resourceName,
+      };
+    }
 
     return {
       status: "enriched",
       message:
         `${data.displayName} was already in Google Contacts; ` +
         `filled in ${filled.join(", ")}.`,
-      resourceName: response.data.resourceName ?? existing.resourceName,
+      resourceName,
       filled,
     };
+  }
+
+  /**
+   * Find the label, creating it the first time. Returns undefined if the label
+   * cannot be resolved - labelling is a nicety and must never fail a sync.
+   */
+  private async resolveGroup(): Promise<string | undefined> {
+    const label = contactLabel();
+    const cached = groupCache.get(label);
+    if (cached) {
+      return cached;
+    }
+
+    const groups = this.peopleService?.contactGroups;
+    if (!groups) {
+      return undefined;
+    }
+
+    try {
+      const response = await this.withTimeout(
+        groups.list({ pageSize: 1000 }),
+        "contactGroups.list"
+      );
+      const existing = (response.data.contactGroups ?? []).find(
+        (group) => group.name === label && group.groupType === "USER_CONTACT_GROUP"
+      );
+      if (existing?.resourceName) {
+        groupCache.set(label, existing.resourceName);
+        return existing.resourceName;
+      }
+
+      const created = await this.withTimeout(
+        groups.create({ requestBody: { contactGroup: { name: label } } }),
+        "contactGroups.create"
+      );
+      if (created.data.resourceName) {
+        groupCache.set(label, created.data.resourceName);
+        return created.data.resourceName;
+      }
+    } catch (error) {
+      console.warn(`Could not resolve the "${label}" contact label:`, error);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Group membership cannot be set through `updateContact` - `memberships` is
+   * not an accepted `updatePersonFields` value - so it needs its own call.
+   */
+  private async addToGroup(group: string, contact: string): Promise<boolean> {
+    const groups = this.peopleService?.contactGroups;
+    if (!groups) {
+      return false;
+    }
+
+    try {
+      await this.withTimeout(
+        groups.members.modify({
+          resourceName: group,
+          requestBody: { resourceNamesToAdd: [contact] },
+        }),
+        "contactGroups.members.modify"
+      );
+      return true;
+    } catch (error) {
+      console.warn("Could not apply the contact label:", error);
+      return false;
+    }
   }
 
   private async withTimeout<T>(promise: Promise<T>, operationName: string): Promise<T> {
