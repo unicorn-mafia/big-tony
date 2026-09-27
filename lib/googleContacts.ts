@@ -59,6 +59,51 @@ const PERSON_FIELDS = "names,phoneNumbers,organizations,urls,biographies,metadat
  */
 export const CONTACT_MARKER = "Source: Unicorn Mafia onboarding (Big Tony)";
 
+/**
+ * Phone numbers this process has just created a contact for.
+ *
+ * `people.connections.list` does not return a contact immediately after it is
+ * created - there is a propagation delay of a minute or more. Two submissions
+ * of the same person inside that window would both scan clean and both create,
+ * producing exactly the duplicate the phone-number check exists to prevent.
+ *
+ * Module-level, so it survives the per-request `new GoogleContactsService()`.
+ * Per-process, so it does not help across instances - the durable guard for the
+ * main path is that a repeat submission finds an open PR and is not allowed to
+ * create. See `allowCreate`.
+ */
+const recentCreates = new Map<string, number>();
+const CREATE_MEMO_MS = 15 * 60 * 1000;
+const MAX_MEMO_ENTRIES = 1000;
+
+function rememberCreate(phoneE164: string, now: number = Date.now()): void {
+  if (recentCreates.size >= MAX_MEMO_ENTRIES) {
+    for (const [phone, at] of recentCreates) {
+      if (now - at > CREATE_MEMO_MS) {
+        recentCreates.delete(phone);
+      }
+    }
+  }
+  recentCreates.set(phoneE164, now);
+}
+
+function createdRecently(phoneE164: string, now: number = Date.now()): boolean {
+  const at = recentCreates.get(phoneE164);
+  if (at === undefined) {
+    return false;
+  }
+  if (now - at > CREATE_MEMO_MS) {
+    recentCreates.delete(phoneE164);
+    return false;
+  }
+  return true;
+}
+
+/** Test seam - lets a suite start from a known state. */
+export function resetRecentCreates(): void {
+  recentCreates.clear();
+}
+
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_DAILY_LIMIT = 25;
 const BUDGET_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -119,8 +164,11 @@ export class GoogleContactsService {
    */
   async syncMemberContact(
     member: MemberContactInput,
-    prUrl?: string
+    prUrl?: string,
+    options: { allowCreate?: boolean } = {}
   ): Promise<GoogleContactSyncResult> {
+    const allowCreate = options.allowCreate ?? true;
+
     if (!this.enabled || !this.peopleService) {
       return {
         status: "skipped",
@@ -146,6 +194,25 @@ export class GoogleContactsService {
         return await this.fillBlanks(scan.match, data, prUrl);
       }
 
+      // Created moments ago by this process but not yet visible to the scan.
+      if (createdRecently(data.phoneE164)) {
+        return {
+          status: "already_exists",
+          message: `${data.displayName} was just added to Google Contacts.`,
+        };
+      }
+
+      // A repeat submission (an open PR already exists) must never create: if
+      // the contact is not visible yet, creating would duplicate it.
+      if (!allowCreate) {
+        return {
+          status: "skipped",
+          message:
+            `${data.displayName} was not added to Google Contacts - this is a ` +
+            "repeat submission and the contact may already exist.",
+        };
+      }
+
       if (scan.recentlyCreated >= this.dailyLimit) {
         console.warn(
           `Google Contacts daily limit reached (${this.dailyLimit} in the last 24h); ` +
@@ -166,6 +233,8 @@ export class GoogleContactsService {
         }),
         "createContact"
       );
+
+      rememberCreate(data.phoneE164);
 
       return {
         status: "created",
@@ -188,8 +257,12 @@ export class GoogleContactsService {
    * service has created in the last 24 hours.
    *
    * `people.searchContacts` is deliberately not used for the lookup: it
-   * requires a warm-up request and its index is only eventually consistent, so
-   * a contact added moments ago can be missed - which would create a duplicate.
+   * requires a warm-up request and its index is even less current.
+   *
+   * Note that this call is not immune either - Google does not return a newly
+   * created contact here for a minute or more. It is authoritative for
+   * established contacts only, so the write-after-write window is covered
+   * separately by `recentCreates` and `allowCreate`.
    *
    * Deriving the daily count from the contact list rather than from a counter
    * in memory means the budget survives restarts and holds across instances,

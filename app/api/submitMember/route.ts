@@ -37,7 +37,11 @@ const rateLimited = (decision: RateLimitDecision, detail: string) =>
  *
  * Failures here are reported but never block the member's join request.
  */
-const syncContact = async (memberData: SubmitMemberInput, prUrl?: string) => {
+const syncContact = async (
+  memberData: SubmitMemberInput,
+  prUrl?: string,
+  options: { allowCreate?: boolean } = {}
+) => {
   const contacts = new GoogleContactsService();
   return contacts.syncMemberContact(
     {
@@ -49,7 +53,8 @@ const syncContact = async (memberData: SubmitMemberInput, prUrl?: string) => {
       linkedin: memberData.linkedin,
       refererName: memberData.referer_name,
     },
-    prUrl
+    prUrl,
+    options
   );
 };
 
@@ -124,7 +129,13 @@ export const POST = async (request: Request) => {
     } as Member;
 
     const result = await githubService.createMemberPR(member);
-    const googleContacts = await syncContact(memberData, result.pr_url);
+
+    // An already-open PR means we have seen this person before and almost
+    // certainly synced them already. Google needs a minute before a new contact
+    // shows up in a scan, so allowing a create here would duplicate it.
+    const googleContacts = await syncContact(memberData, result.pr_url, {
+      allowCreate: result.status !== "pr_exists",
+    });
 
     return NextResponse.json({ ...result, google_contacts: googleContacts });
   } catch (error) {

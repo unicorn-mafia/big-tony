@@ -140,6 +140,12 @@ everything else works as normal.
 - Contacts are deduplicated on **phone number** in E.164 form, so the same
   person is never added twice - `+44 7700 900123`, `447700900123` and
   `00447700900123` all resolve to the same contact.
+- Google does not return a newly created contact from `connections.list` for a
+  minute or more, so a scan alone cannot prevent a duplicate from two rapid
+  submissions. Two extra guards close that window: this process remembers the
+  numbers it has just created for 15 minutes, and a submission that finds an
+  already-open PR is never allowed to create (only to fill blanks). The memo is
+  per-process; the PR check is durable and holds across instances.
 - If the number already exists, the existing contact is **never overwritten**.
   Only fields that are currently blank get filled in (organisation, GitHub /
   LinkedIn URLs, notes), and existing URLs are preserved.
