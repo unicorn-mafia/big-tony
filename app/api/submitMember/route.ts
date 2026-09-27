@@ -4,6 +4,7 @@ import { validateBody } from "../../../lib/validation";
 import { verifyRequest } from "../../../lib/authorization";
 import { GitHubService } from "../../../lib/github";
 import { GoogleContactsService } from "../../../lib/googleContacts";
+import { checkOverallRate, checkPhoneRate, type RateLimitDecision } from "../../../lib/rateLimit";
 import { Member } from "@/types/membersdb";
 
 export const submitMemberSchema = z.object({
@@ -17,6 +18,18 @@ export const submitMemberSchema = z.object({
 });
 
 type SubmitMemberInput = z.infer<typeof submitMemberSchema>;
+
+/** 429 with the retry window, phrased so the agent can relay it as-is. */
+const rateLimited = (decision: RateLimitDecision, detail: string) =>
+  NextResponse.json(
+    {
+      status: "error",
+      message:
+        `Too many join requests ${detail}. Try again in ` +
+        `${decision.retryAfterSeconds} seconds.`,
+    },
+    { status: 429, headers: { "Retry-After": String(decision.retryAfterSeconds) } }
+  );
 
 /**
  * Add the member to Google Contacts. Deduplicated on phone number, and never
@@ -46,12 +59,27 @@ export const POST = async (request: Request) => {
     return authResponse;
   }
 
+  // Checked before the body is parsed, so a flood cannot cost us GitHub or
+  // Google calls. Authenticated requests only - a rejected caller can never
+  // consume the budget.
+  const overall = checkOverallRate();
+  if (!overall.allowed) {
+    console.warn("submitMember rate limit hit (overall)");
+    return rateLimited(overall, "right now");
+  }
+
   const validation = await validateBody(request, submitMemberSchema);
   if (!validation.success) {
     return validation.response;
   }
 
   const memberData = validation.data;
+
+  const perPhone = checkPhoneRate(memberData.phone_e164);
+  if (!perPhone.allowed) {
+    console.warn("submitMember rate limit hit (per phone)");
+    return rateLimited(perPhone, "for this phone number");
+  }
   const githubService = new GitHubService();
 
   // Check if GitHub user exists

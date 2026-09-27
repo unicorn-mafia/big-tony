@@ -131,6 +131,35 @@ Run the sync's test suite (fully offline, against a fake People API):
 npm run test:contacts
 ```
 
+### Abuse Protection
+
+`POST /api/submitMember` is authenticated, but a leaked API key or a looping
+agent could still flood your contact book. Three independent guards, all
+optional to configure and all on by default:
+
+| Guard | Default | Env var |
+|---|---|---|
+| Requests per minute | 10 | `SUBMIT_MEMBER_RATE_LIMIT`, `SUBMIT_MEMBER_RATE_WINDOW_MS` |
+| Requests per phone number per hour | 3 | `SUBMIT_MEMBER_PHONE_LIMIT`, `SUBMIT_MEMBER_PHONE_WINDOW_MS` |
+| New contacts per rolling 24h | 25 | `GOOGLE_CONTACTS_DAILY_LIMIT` |
+| Kill switch | on | `GOOGLE_CONTACTS_SYNC_ENABLED="false"` |
+
+The first two are in-memory sliding windows checked in the route, the overall
+one before the request body is even parsed so a flood cannot cost GitHub or
+Google calls. They return `429` with a `Retry-After` header. Being in-memory,
+they reset on a cold start and are not shared between instances - they stop
+runaway loops and bursts, but they are not a hard guarantee.
+
+The daily contact cap is the one that actually protects your Google account. It
+is derived from the contact list itself: every contact this service creates is
+stamped with a marker in its notes, and the existing duplicate scan counts how
+many carry that marker with a timestamp inside the last 24 hours. That means the
+budget survives restarts, holds across instances, and needs no database. Over
+budget, creation is refused with status `rate_limited`; filling blanks on a
+contact that already exists is still allowed, since that adds no clutter.
+
+The kill switch stops all contact writes without removing your credentials.
+
 ## API Endpoints
 
 | Endpoint | Description |
@@ -154,6 +183,7 @@ big-tony/
 │   ├── contactData.ts      # Contact validation + normalisation (phone, URLs)
 │   ├── github.ts           # GitHub API integration
 │   ├── googleContacts.ts   # Google Contacts sync (People API)
+│   ├── rateLimit.ts        # Sliding-window rate limiting
 │   └── validation.ts       # Input validation
 ├── types/
 │   └── membersdb.ts        # TypeScript types for member data

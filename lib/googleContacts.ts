@@ -12,6 +12,7 @@ export type GoogleContactSyncStatus =
   | "already_exists"
   | "skipped"
   | "invalid"
+  | "rate_limited"
   | "failed";
 
 export interface GoogleContactSyncResult {
@@ -33,9 +34,17 @@ export interface MemberContactInput {
 }
 
 /** Fields we read when scanning for an existing contact and when merging. */
-const PERSON_FIELDS = "names,phoneNumbers,organizations,urls,biographies";
+const PERSON_FIELDS = "names,phoneNumbers,organizations,urls,biographies,metadata";
+
+/**
+ * Stamped into the notes of every contact this service creates. It is what
+ * lets the daily budget below count our own writes without a database.
+ */
+export const CONTACT_MARKER = "Source: Unicorn Mafia onboarding (Big Tony)";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+const DEFAULT_DAILY_LIMIT = 25;
+const BUDGET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 25; // 25k contacts; guards against an unbounded scan.
 
@@ -43,9 +52,22 @@ export class GoogleContactsService {
   private peopleService?: people_v1.People;
   private enabled: boolean;
   private requestTimeoutMs: number;
+  private dailyLimit: number;
+  private disabledReason?: string;
 
   constructor() {
     this.requestTimeoutMs = resolveTimeoutMs(process.env.GOOGLE_CONTACTS_TIMEOUT_MS);
+    this.dailyLimit = resolvePositiveInt(
+      process.env.GOOGLE_CONTACTS_DAILY_LIMIT,
+      DEFAULT_DAILY_LIMIT
+    );
+
+    // Kill switch: stops all writes without having to remove credentials.
+    if (process.env.GOOGLE_CONTACTS_SYNC_ENABLED === "false") {
+      this.enabled = false;
+      this.disabledReason = "Google Contacts sync is turned off.";
+      return;
+    }
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -53,6 +75,7 @@ export class GoogleContactsService {
 
     if (!clientId || !clientSecret || !refreshToken) {
       this.enabled = false;
+      this.disabledReason = "Google Contacts sync is not configured.";
       return;
     }
 
@@ -84,7 +107,7 @@ export class GoogleContactsService {
     if (!this.enabled || !this.peopleService) {
       return {
         status: "skipped",
-        message: "Google Contacts sync is not configured.",
+        message: this.disabledReason ?? "Google Contacts sync is not configured.",
       };
     }
 
@@ -98,10 +121,25 @@ export class GoogleContactsService {
     const data = validated.data;
 
     try {
-      const existing = await this.findContactByPhone(data.phoneE164);
+      const scan = await this.scanContacts(data.phoneE164);
 
-      if (existing) {
-        return await this.fillBlanks(existing, data, prUrl);
+      // Filling blanks on a contact that already exists adds no clutter, so it
+      // is allowed regardless of the budget.
+      if (scan.match) {
+        return await this.fillBlanks(scan.match, data, prUrl);
+      }
+
+      if (scan.recentlyCreated >= this.dailyLimit) {
+        console.warn(
+          `Google Contacts daily limit reached (${this.dailyLimit} in the last 24h); ` +
+            `refusing to add ${data.displayName}.`
+        );
+        return {
+          status: "rate_limited",
+          message:
+            `Not added to Google Contacts - the daily limit of ${this.dailyLimit} ` +
+            "new contacts has been reached.",
+        };
       }
 
       const response = await this.withTimeout(
@@ -128,21 +166,30 @@ export class GoogleContactsService {
   }
 
   /**
-   * Scan the full contact list for a matching phone number.
+   * Single pass over the contact list that answers both questions we need:
+   * whether this phone number is already known, and how many contacts this
+   * service has created in the last 24 hours.
    *
-   * `people.searchContacts` is deliberately not used: it requires a warm-up
-   * request and its index is only eventually consistent, so a contact added
-   * moments ago can be missed - which would create a duplicate.
+   * `people.searchContacts` is deliberately not used for the lookup: it
+   * requires a warm-up request and its index is only eventually consistent, so
+   * a contact added moments ago can be missed - which would create a duplicate.
+   *
+   * Deriving the daily count from the contact list rather than from a counter
+   * in memory means the budget survives restarts and holds across instances,
+   * with no database to run.
    */
-  private async findContactByPhone(
-    phoneE164: string
-  ): Promise<people_v1.Schema$Person | null> {
+  private async scanContacts(
+    phoneE164: string,
+    now: number = Date.now()
+  ): Promise<{ match: people_v1.Schema$Person | null; recentlyCreated: number }> {
     if (!this.peopleService) {
-      return null;
+      return { match: null, recentlyCreated: 0 };
     }
 
+    const cutoff = now - BUDGET_WINDOW_MS;
     let pageToken: string | undefined;
     let pages = 0;
+    let recentlyCreated = 0;
 
     do {
       const response = await this.withTimeout(
@@ -161,7 +208,11 @@ export class GoogleContactsService {
           phonesMatch(entry.canonicalForm ?? entry.value ?? "", phoneE164)
         );
         if (matched) {
-          return person;
+          // An existing contact is never a new write, so the budget is moot.
+          return { match: person, recentlyCreated };
+        }
+        if (isRecentlyCreatedByUs(person, cutoff)) {
+          recentlyCreated += 1;
         }
       }
 
@@ -176,7 +227,7 @@ export class GoogleContactsService {
       );
     }
 
-    return null;
+    return { match: null, recentlyCreated };
   }
 
   /**
@@ -310,7 +361,7 @@ export class GoogleContactsService {
 
 function buildNotes(data: NormalizedContactData, prUrl?: string): string {
   return [
-    "Source: Unicorn Mafia onboarding (Big Tony)",
+    CONTACT_MARKER,
     data.refererName ? `Referred by: ${data.refererName}` : null,
     prUrl ? `PR: ${prUrl}` : null,
   ]
@@ -361,6 +412,37 @@ function normalizeUrlForCompare(url: string): string {
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
     .replace(/\/+$/, "");
+}
+
+/**
+ * True when this contact was created by us and last touched inside the budget
+ * window. Contacts with no usable timestamp are not counted: a fresh write from
+ * the People API always carries one, so an undated contact is an old one, and
+ * counting it would block legitimate joins.
+ */
+function isRecentlyCreatedByUs(
+  person: people_v1.Schema$Person,
+  cutoff: number
+): boolean {
+  const isOurs = (person.biographies ?? []).some((bio) =>
+    (bio.value ?? "").includes(CONTACT_MARKER)
+  );
+  if (!isOurs) {
+    return false;
+  }
+
+  return (person.metadata?.sources ?? []).some((source) => {
+    const updatedAt = source.updateTime ? Date.parse(source.updateTime) : NaN;
+    return Number.isFinite(updatedAt) && updatedAt >= cutoff;
+  });
+}
+
+function resolvePositiveInt(rawValue: string | undefined, fallback: number): number {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.floor(parsed);
 }
 
 function resolveTimeoutMs(rawValue: string | undefined): number {
