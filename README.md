@@ -110,6 +110,19 @@ everything else works as normal.
    This opens a consent screen, asks for the `contacts` scope, and prints a
    `GOOGLE_REFRESH_TOKEN=...` line to paste into your `.env`.
 
+4. Set the publishing status to **In production** on the Audience page.
+
+   This matters twice over. While the app sits in *Testing*, authorisation fails
+   with **"Access blocked: ... has not completed the Google verification
+   process"** (`Error 403: access_denied`) for anyone not on the test-user list
+   — and Google expires refresh tokens after **7 days**, so a sync set up in
+   Testing works all week and then quietly stops.
+
+   Publishing unverified is fine for personal use: you will see a "Google hasn't
+   verified this app" screen once, and get through it with **Advanced → Go to
+   ... (unsafe)**. Verification is only needed to remove that warning or to go
+   past 100 users.
+
 **Behaviour**
 
 - Contacts are deduplicated on **phone number** in E.164 form, so the same
