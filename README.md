@@ -123,6 +123,18 @@ everything else works as normal.
    ... (unsafe)**. Verification is only needed to remove that warning or to go
    past 100 users.
 
+   The confirmation dialog warns that the app "will be available to any user
+   with a Google Account". That governs who may *consent*, not who may read your
+   data: consent is always per-account, so anyone else authorising the app would
+   be granting it access to *their* contacts, not yours. Reaching your consent
+   screen at all requires the client ID and secret, and the only registered
+   redirect URI is localhost — the deployed app has no OAuth callback route.
+   Access to your contacts comes solely from `GOOGLE_REFRESH_TOKEN`. You can
+   revoke it at any time at https://myaccount.google.com/permissions.
+
+   ("Make internal" avoids this entirely, but needs Google Workspace — it is
+   unavailable on a personal Gmail account.)
+
 **Behaviour**
 
 - Contacts are deduplicated on **phone number** in E.164 form, so the same
