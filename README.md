@@ -160,6 +160,41 @@ contact that already exists is still allowed, since that adds no clutter.
 
 The kill switch stops all contact writes without removing your credentials.
 
+### Why the sync cannot delete contacts
+
+The `contacts` OAuth scope is necessarily read-write and includes the right to
+delete - Google offers no create-and-update-but-not-delete scope. The
+restriction is enforced in code instead, in three layers:
+
+1. **No route exposes it.** The only path that touches Google is
+   `POST /api/submitMember`, which creates or enriches. Big Tony can only call
+   the tools defined in `wassist/tools/`, none of which delete anything, so no
+   WhatsApp message - however it is phrased - can reach a deletion.
+2. **The client is type-narrowed.** `lib/googleContacts.ts` declares a
+   `ContactsClient` type exposing only `connections.list`, `createContact` and
+   `updateContact`. `deleteContact`, `batchDeleteContacts` and
+   `deleteContactPhoto` are compile errors, not a matter of discipline.
+3. **A regression test guards it.** `npm run test:contacts` fails if any
+   destructive People API call appears anywhere in `lib/`.
+
+Updates are also field-scoped: `updatePersonFields` only ever names fields being
+actively written, so an update cannot blank a field by omission.
+
+The residual risk is credential theft - anyone holding `GOOGLE_REFRESH_TOKEN`
+can call Google directly and bypass all of the above. Keep it out of the repo
+(`.env` is gitignored), and note that Google Contacts keeps deleted contacts in
+the bin for 30 days and offers "Undo changes" to roll the whole contact book
+back to an earlier point within that window.
+
+### Why the OAuth redirect URI is localhost
+
+The redirect URI is only used by `npm run google:auth`, which you run once on
+your own machine to mint the refresh token. The deployed server never performs
+an OAuth redirect: it exchanges the stored refresh token for access tokens
+directly against Google, with no browser and no callback involved. So the
+localhost URI stays correct in production, and the deployed app has no OAuth
+callback route to attack.
+
 ## API Endpoints
 
 | Endpoint | Description |

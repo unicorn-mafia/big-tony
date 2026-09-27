@@ -33,6 +33,23 @@ export interface MemberContactInput {
   refererName?: string;
 }
 
+/**
+ * The only slice of the People API this service may touch.
+ *
+ * The `contacts` OAuth scope is necessarily read-write and carries the right to
+ * delete - Google offers no create-and-update-but-not-delete scope. So the
+ * restriction is enforced here instead: narrowing the client to these three
+ * operations makes `deleteContact`, `batchDeleteContacts` and
+ * `deleteContactPhoto` compile errors rather than a judgement call. A matching
+ * regression test in scripts/test-google-contacts.mts fails if any destructive
+ * call is ever added to lib/.
+ */
+type ContactsClient = {
+  people: Pick<people_v1.Resource$People, "createContact" | "updateContact"> & {
+    connections: Pick<people_v1.Resource$People$Connections, "list">;
+  };
+};
+
 /** Fields we read when scanning for an existing contact and when merging. */
 const PERSON_FIELDS = "names,phoneNumbers,organizations,urls,biographies,metadata";
 
@@ -49,7 +66,7 @@ const PAGE_SIZE = 1000;
 const MAX_PAGES = 25; // 25k contacts; guards against an unbounded scan.
 
 export class GoogleContactsService {
-  private peopleService?: people_v1.People;
+  private peopleService?: ContactsClient;
   private enabled: boolean;
   private requestTimeoutMs: number;
   private dailyLimit: number;
