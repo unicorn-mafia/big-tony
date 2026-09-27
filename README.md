@@ -131,6 +131,18 @@ Run the sync's test suite (fully offline, against a fake People API):
 npm run test:contacts
 ```
 
+To check the live path against the real People API, which needs only the three
+`GOOGLE_*` variables and no other credentials:
+
+```bash
+npm run test:contacts:live -- --confirm
+```
+
+This writes one real contact (`Big Tony Smoke Test`, on an Ofcom
+reserved-for-drama number) to the account behind your refresh token. Run it twice
+to see deduplication work on live data, then delete the contact by hand at
+contacts.google.com.
+
 ### Abuse Protection
 
 `POST /api/submitMember` is authenticated, but a leaked API key or a looping
@@ -223,8 +235,9 @@ big-tony/
 ├── types/
 │   └── membersdb.ts        # TypeScript types for member data
 ├── scripts/
-│   ├── get-google-refresh-token.mjs  # One-off Google OAuth helper
-│   └── test-google-contacts.mts      # Contact sync test suite
+│   ├── get-google-refresh-token.mjs   # One-off Google OAuth helper
+│   ├── smoke-test-google-contacts.mts # Live People API smoke test
+│   └── test-google-contacts.mts       # Contact sync test suite
 └── wassist/
     ├── system_prompt.txt   # Agent system prompt for Wassist
     └── tools/              # Wassist tool configurations (JSON)
@@ -238,6 +251,7 @@ npm run build   # Build for production
 npm run start   # Start production server
 npm run lint    # Run ESLint
 
-npm run test:contacts  # Test the Google Contacts sync (offline)
-npm run google:auth    # Mint a Google refresh token for Contacts sync
+npm run test:contacts       # Test the Google Contacts sync (offline)
+npm run test:contacts:live  # Smoke test against the real People API (writes a contact)
+npm run google:auth         # Mint a Google refresh token for Contacts sync
 ```
